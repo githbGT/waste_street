@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פינוי אשפה ומחזור לפי רחוב | עיריית גני תקווה</title>
+<style>
+  :root {
+    --ground: #F3F6F4;
+    --paper: #FFFFFF;
+    --ink: #1B2B26;
+    --muted: #56665F;
+    --line: #DCE4E0;
+    --accent: #1E6B52;
+    --accent-soft: #E6F1EC;
+    --radius-lg: 18px;
+    --radius-sm: 10px;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: system-ui, "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 24px) 32px;
+  }
+
+  /* Header */
+  h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 1.2rem + 2.4vw, 2.5rem);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .bins {
+    display: flex;
+    gap: 6px;
+    margin: 14px 0 28px;
+  }
+  .bins span {
+    height: 6px;
+    width: 34px;
+    border-radius: 3px;
+    background: var(--c);
+  }
+
+  /* Search */
+  .search { position: relative; }
+  .search label {
+    display: block;
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .field { position: relative; }
+  .field svg.lens {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+    width: 22px; height: 22px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  #street-input {
+    width: 100%;
+    font: inherit;
+    font-size: 1.125rem;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 15px 50px 15px 48px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #street-input::placeholder { color: #8A9893; }
+  #street-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  #clear-btn {
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+    width: 36px; height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #clear-btn.show { display: flex; }
+  #clear-btn:hover { background: var(--ground); }
+  #clear-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  #street-list {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 6px);
+    right: 0; left: 0;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 12px 32px rgba(27, 43, 38, .12);
+    max-height: min(320px, 50vh);
+    overflow-y: auto;
+  }
+  #street-list[hidden] { display: none; }
+  #street-list li {
+    padding: 11px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  #street-list li[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+  #street-list li.empty {
+    cursor: default;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  /* Result card */
+  #result { margin-top: 28px; }
+  #result:empty { display: none; }
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    animation: rise .25s ease-out;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .card { animation: none; } }
+
+  .card-head {
+    padding: 22px clamp(18px, 4vw, 28px) 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .card-head h2 { margin: 0; font-size: clamp(1.5rem, 1.2rem + 1.4vw, 1.9rem); line-height: 1.25; }
+
+  .group { padding: 6px clamp(18px, 4vw, 28px) 10px; }
+  .group + .group { border-top: 8px solid var(--ground); }
+  .group h3 {
+    margin: 16px 0 4px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .item {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 14px;
+    padding: 16px 0;
+    align-items: start;
+  }
+  .item + .item { border-top: 1px solid var(--line); }
+  .swatch {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--c) 14%, white);
+    color: var(--c);
+  }
+  .swatch svg { width: 24px; height: 24px; }
+  .item h4 { margin: 0; font-size: 1.0625rem; font-weight: 700; line-height: 1.4; }
+  .item .note { margin: 0; font-size: 0.9rem; color: var(--muted); }
+  .item .value { margin-top: 4px; }
+  .item .value p { margin: 0; }
+  .item .value p + p { margin-top: 6px; }
+  .item .value ul { margin: 0; padding: 0 18px 0 0; }
+  .item .value li + li { margin-top: 4px; }
+  .item .value li::marker { color: var(--c); }
+  .missing { color: var(--muted); font-style: italic; }
+
+  .card-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 16px clamp(18px, 4vw, 28px);
+    background: var(--accent-soft);
+    font-size: 0.97rem;
+  }
+  .card-foot a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--paper);
+    background: var(--accent);
+    text-decoration: none;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 999px;
+  }
+  .card-foot a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+  .updated {
+    margin: 22px 0 0;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  @media (max-width: 420px) {
+    .item { grid-template-columns: 38px 1fr; gap: 12px; }
+    .swatch { width: 38px; height: 38px; border-radius: 10px; }
+    .swatch svg { width: 21px; height: 21px; }
+  }
+
+  /* Loading / error states */
+  #street-input:disabled { background: var(--ground); cursor: progress; }
+  .load-error {
+    margin-top: 20px;
+    padding: 16px 18px;
+    background: var(--paper);
+    border: 1.5px solid #E2B4A4;
+    border-radius: var(--radius-sm);
+  }
+  .load-error a { color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>פינוי אשפה ומחזור לפי רחוב</h1>
+  <div class="bins" aria-hidden="true">
+    <span style="--c:#5E8C3A"></span><span style="--c:#E07020"></span><span style="--c:#1F5FAE"></span><span style="--c:#7A4E9E"></span><span style="--c:#9A6A34"></span><span style="--c:#3F5560"></span>
+  </div>
+
+  <div class="search">
+    <label for="street-input" id="street-label">באיזה רחוב אתם גרים?</label>
+    <div class="field">
+      <svg class="lens" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="street-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="טוען את רשימת הרחובות…" disabled
+             role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="street-list">
+      <button id="clear-btn" type="button" aria-label="ניקוי החיפוש">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <ul id="street-list" role="listbox" aria-labelledby="street-label" hidden></ul>
+  </div>
+
+  <div id="result" aria-live="polite"></div>
+
+  <p class="updated" id="updated"></p>
+</main>
+
+<script src="vendor/xlsx.mini.min.js"></script>
+<script>
+/* ==========================================================================
+   הנתונים נטענים מהקובץ data/streets.xlsx (גיליון "רחובות", שורה 1 = כותרות).
+   לעדכון: מחליפים את קובץ האקסל בריפו. אין צורך לגעת בקובץ הזה.
+   ========================================================================== */
+const DATA_URL = "data/streets.xlsx";
+const SHEET_NAME = "רחובות";
+const UPDATE_SHEET = "עדכון";   // cell B1 = update date (optional)
+
+function startApp(DATA) {
+  "use strict";
+
+  // Display settings per Excel column, matched by a keyword in the column title.
+  // A column that matches nothing still appears, under "מידע נוסף", so nothing is ever hidden.
+  const ICONS = {
+    branch: '<path d="M12 21V11"/><path d="M12 14c-3 0-5-2-5-5 3 0 5 2 5 5Z"/><path d="M12 11c0-3 2-6 6-6 0 4-3 6-6 6Z"/>',
+    broom: '<path d="M14 4 9.5 12.5"/><path d="M6 13h7l2 7H4Z"/><path d="M7.5 20 8 16M11 20l-.2-4"/>',
+    bin: '<path d="M5 7h14"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7 7.5 20h9l1-13"/><path d="M10 11v5M14 11v5"/>',
+    paper: '<path d="M7 3h7l4 4v14H7Z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
+    bottle: '<path d="M10 3h4v4l2 3v11H8V10l2-3Z"/><path d="M8 14h8"/>',
+    box: '<path d="m3 7 9-4 9 4-9 4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+    plug: '<path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0Z"/><path d="M12 17v4"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'
+  };
+  const FIELDS = [
+    { match: "גזם",        group: "schedule", color: "#5E8C3A", icon: "branch" },
+    { match: "ניקיון",     group: "schedule", color: "#4A6B8A", icon: "broom" },
+    { match: "פח כתום",    group: "schedule", color: "#D2661A", icon: "bin" },
+    { match: "תפוזית",     group: "recycle",  color: "#1F5FAE", icon: "paper" },
+    { match: "זכוכי",      group: "recycle",  color: "#7A4E9E", icon: "bottle" },
+    { match: "קרטוני",     group: "recycle",  color: "#9A6A34", icon: "box" },
+    { match: "אלקטרוני",   group: "recycle",  color: "#3F5560", icon: "plug" }
+  ];
+  const GROUPS = [
+    { id: "schedule", title: "ימי פינוי וניקיון" },
+    { id: "recycle",  title: "מחזור ומיקומי מתקנים" },
+    { id: "other",    title: "מידע נוסף" }
+  ];
+  const MISSING_TEXT = "המידע אינו זמין כרגע";
+
+  const columns = DATA.columns || [];
+  const streetCol = 0;
+  const streets = (DATA.rows || []).map(r => ({ name: r[streetCol], cells: r }));
+
+  // ---------- Search ----------
+  // Lenient matching: ignores punctuation, the letters י/ו (כנרת = כינרת),
+  // and leading "דרך", "סמטת", "רחוב" and the definite article ה.
+  const STOP = ["דרך", "סמטת", "רחב", "רח"];
+  function norm(s) {
+    return String(s).replace(/["'׳״`.,\-–]/g, " ").replace(/[יו]/g, "").replace(/\s+/g, " ").trim();
+  }
+  function key(s) {
+    return norm(s).split(" ").filter(w => w && !STOP.includes(w))
+      .map(w => w.length > 2 ? w.replace(/^ה/, "") : w).join(" ");
+  }
+  streets.forEach(s => { s._n = norm(s.name); s._k = key(s.name); });
+  streets.sort((a, b) => a.name.localeCompare(b.name, "he"));
+
+  function search(q) {
+    const nq = norm(q), kq = key(q);
+    if (!nq) return streets.slice();
+    const hits = streets.filter(s => s._n.includes(nq) || (kq && s._k.includes(kq)));
+    const starts = s => s._n.startsWith(nq) || (kq && s._k.startsWith(kq)) ? 0 : 1;
+    return hits.sort((a, b) => starts(a) - starts(b) || a.name.localeCompare(b.name, "he"));
+  }
+
+  // ---------- Combobox ----------
+  const input = document.getElementById("street-input");
+  const list = document.getElementById("street-list");
+  const clearBtn = document.getElementById("clear-btn");
+  const result = document.getElementById("result");
+  let options = [];
+  let active = -1;
+
+  function openList(items) {
+    options = items;
+    active = -1;
+    list.innerHTML = "";
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "לא נמצא רחוב בשם הזה. נסו לכתוב חלק מהשם, או פנו למוקד העירוני 106.";
+      list.appendChild(li);
+    }
+    items.forEach((s, i) => {
+      const li = document.createElement("li");
+      li.id = "opt-" + i;
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", "false");
+      li.textContent = s.name;
+      li.addEventListener("mousedown", e => { e.preventDefault(); choose(s); });
+      list.appendChild(li);
+    });
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    input.removeAttribute("aria-activedescendant");
+  }
+  function closeList() {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    active = -1;
+  }
+  function setActive(i) {
+    const items = list.querySelectorAll('[role="option"]');
+    if (!items.length) return;
+    if (active >= 0 && items[active]) items[active].setAttribute("aria-selected", "false");
+    active = (i + items.length) % items.length;
+    const el = items[active];
+    el.setAttribute("aria-selected", "true");
+    input.setAttribute("aria-activedescendant", el.id);
+    el.scrollIntoView({ block: "nearest" });
+  }
+  function choose(s) {
+    input.value = s.name;
+    clearBtn.classList.add("show");
+    closeList();
+    render(s);
+  }
+
+  input.addEventListener("input", () => {
+    clearBtn.classList.toggle("show", input.value.length > 0);
+    openList(search(input.value));
+  });
+  input.addEventListener("focus", () => openList(search(input.value)));
+  input.addEventListener("blur", () => setTimeout(closeList, 120));
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) openList(search(input.value)); setActive(active + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive(active - 1); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const pick = active >= 0 ? options[active] : options[0];
+      if (pick && !list.hidden) choose(pick);
+    }
+    else if (e.key === "Escape") { closeList(); }
+  });
+  clearBtn.addEventListener("click", () => {
+    input.value = "";
+    clearBtn.classList.remove("show");
+    result.innerHTML = "";
+    input.focus();
+  });
+
+  // ---------- Card ----------
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function fieldFor(title) {
+    return FIELDS.find(f => title.includes(f.match)) || { group: "other", color: "#56665F", icon: "info" };
+  }
+  // The Excel text is shown exactly as written. The only formatting:
+  // a line break after each "יום הוצאה X'" when more text follows (streets split by house numbers),
+  // and items separated by ";" shown as a list.
+  function valueNode(text) {
+    const box = el("div", "value");
+    const t = String(text || "").trim();
+    if (!t) { box.appendChild(el("p", "missing", MISSING_TEXT)); return box; }
+    if (t.includes(";")) {
+      const ul = el("ul");
+      t.split(";").map(x => x.trim()).filter(Boolean).forEach(x => ul.appendChild(el("li", null, x)));
+      box.appendChild(ul);
+      return box;
+    }
+    const broken = t.replace(/((?:יום הוצאה|הוצאה יום|הוצאה ביום) [א-ו]')\s+(?=[א-ת])/g, "$1\n");
+    broken.split("\n").forEach(line => box.appendChild(el("p", null, line.trim())));
+    return box;
+  }
+
+  function render(s) {
+    result.innerHTML = "";
+    const card = el("article", "card");
+
+    const head = el("header", "card-head");
+    head.appendChild(el("h2", null, s.name));
+    card.appendChild(head);
+
+    const byGroup = {};
+    columns.forEach((title, i) => {
+      if (i === streetCol) return;
+      const f = fieldFor(title);
+      (byGroup[f.group] = byGroup[f.group] || []).push({ title, f, value: s.cells[i] });
+    });
+
+    GROUPS.forEach(g => {
+      const items = byGroup[g.id];
+      if (!items || !items.length) return;
+      const sec = el("section", "group");
+      sec.appendChild(el("h3", null, g.title));
+      items.forEach(({ title, f, value }) => {
+        const item = el("div", "item");
+        item.style.setProperty("--c", f.color);
+        const sw = el("span", "swatch");
+        sw.setAttribute("aria-hidden", "true");
+        sw.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS[f.icon] + "</svg>";
+        item.appendChild(sw);
+        const body = el("div");
+        // Column titles like "תפוזית כחולה - אחת לשבועיים בכל יום א'" show the part after " - " as a note.
+        const parts = title.split(/\s+[-–]\s+/);
+        body.appendChild(el("h4", null, parts[0]));
+        if (parts.length > 1) body.appendChild(el("p", "note", parts.slice(1).join(" - ")));
+        body.appendChild(valueNode(value));
+        item.appendChild(body);
+        sec.appendChild(item);
+      });
+      card.appendChild(sec);
+    });
+
+    const foot = el("footer", "card-foot");
+    foot.appendChild(el("span", null, "שאלות או בקשות בנושא פינוי וניקיון? מוקד עירוני"));
+    const a = el("a", null, "106");
+    a.href = "tel:106";
+    a.setAttribute("aria-label", "התקשרות למוקד העירוני 106");
+    foot.appendChild(a);
+    card.appendChild(foot);
+
+    result.appendChild(card);
+    if (window.matchMedia("(max-width: 720px)").matches) {
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  if (DATA.updated) document.getElementById("updated").textContent = "המידע עודכן לאחרונה: " + DATA.updated;
+
+  // ---------- Embedding: report page height to the parent page (for iframe auto-height) ----------
+  if (window.parent !== window && "ResizeObserver" in window) {
+    const send = () => window.parent.postMessage({ type: "ganei-tikva-waste-height", height: document.documentElement.scrollHeight }, "*");
+    new ResizeObserver(send).observe(document.body);
+    send();
+  }
+}
+
+// ---------- Load and validate the Excel ----------
+function cellText(v) {
+  if (v instanceof Date) {
+    return [v.getDate(), v.getMonth() + 1, v.getFullYear()].map(n => String(n).padStart(2, "0")).join(".");
+  }
+  return String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+}
+
+function parseWorkbook(buf) {
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const sheet = wb.Sheets[SHEET_NAME];
+  if (!sheet) throw new Error('לא נמצא גיליון בשם "' + SHEET_NAME + '". גיליונות בקובץ: ' + wb.SheetNames.join(", "));
+
+  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false });
+  // Header row = first row whose first cell contains "רחוב" (tolerates a title row above the table)
+  const h = grid.findIndex(r => cellText(r[0]).includes("רחוב"));
+  if (h < 0) throw new Error('לא נמצאה שורת כותרות שהעמודה הראשונה בה היא "רחוב".');
+
+  const header = grid[h].map(cellText);
+  let last = header.length;
+  while (last > 0 && !header[last - 1]) last--;           // drop trailing empty columns
+  const keep = header.slice(0, last).map((t, i) => (t ? i : -1)).filter(i => i >= 0);
+  if (keep.length < 2) throw new Error("בשורת הכותרות יש פחות משתי עמודות.");
+
+  const seen = new Set();
+  const rows = [];
+  grid.slice(h + 1).forEach(r => {
+    const name = cellText(r[0]);
+    if (!name) return;                                     // skip empty / spacer rows
+    if (seen.has(name)) console.warn("רחוב כפול באקסל, מוצגת השורה הראשונה בלבד:", name);
+    else { seen.add(name); rows.push(keep.map(i => cellText(r[i]))); }
+  });
+  if (!rows.length) throw new Error("לא נמצאו רחובות מתחת לשורת הכותרות.");
+
+  let updated = "";
+  const us = wb.Sheets[UPDATE_SHEET];
+  if (us && us.B1) updated = cellText(us.B1.v instanceof Date ? us.B1.v : (us.B1.w || us.B1.v));
+  return { columns: keep.map(i => header[i]), rows, updated };
+}
+
+function showLoadError(err) {
+  console.error("[פינוי אשפה] טעינת הנתונים נכשלה:", err);
+  const input = document.getElementById("street-input");
+  input.placeholder = "המידע אינו זמין כרגע";
+  const box = document.createElement("div");
+  box.className = "load-error";
+  box.setAttribute("role", "alert");
+  box.innerHTML = 'לא הצלחנו לטעון את מידע הפינוי כרגע. נסו לרענן את העמוד, או פנו למוקד העירוני <a href="tel:106">106</a>.';
+  document.getElementById("result").appendChild(box);
+}
+
+(async function () {
+  try {
+    if (typeof XLSX === "undefined") throw new Error("ספריית הקריאה vendor/xlsx.mini.min.js לא נטענה.");
+    const res = await fetch(DATA_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("הקובץ " + DATA_URL + " לא נמצא (HTTP " + res.status + ").");
+    const DATA = parseWorkbook(await res.arrayBuffer());
+    const input = document.getElementById("street-input");
+    input.disabled = false;
+    input.placeholder = "התחילו להקליד שם רחוב";
+    startApp(DATA);
+  } catch (err) {
+    showLoadError(err);
+  }
+})();
+</script>
+</body>
+</html>
